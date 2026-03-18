@@ -296,7 +296,6 @@
       </button>
     </div>
   </div>
-</div>
 
   <!-- CALENDARIO -->
   <div id="tab-calendario" class="ctn" style="display:none">
@@ -510,11 +509,10 @@ async function loadData() {
   allChecks = [];
   (c.data || []).forEach(r => {
     allChecks.push(r);
-    var d = r.check_date || todayStr();
+    var d = r.check_date || r.created_at.slice(0,10);
+    r._date = d;
     var key = r.task_id + '_' + d;
     checks[key] = r;
-    // also keep today's checks under just task_id for backwards compat
-    if (d === todayStr()) checks[r.task_id] = r;
   });
   history = h.data || [];
   assignments = {};
@@ -616,7 +614,7 @@ function rAll() { renderDateBar(); rStats(); rTasks(); }
 
 function rStats() {
   var useDate = activeDate || todayStr();
-  var dayChecks = Object.values(checks).filter(function(c){ return (c.check_date||todayStr()) === useDate; });
+  var dayChecks = Object.values(checks).filter(function(c){ return (c._date||todayStr()) === useDate; });
   var done = dayChecks.length;
   var dayHistory = history.filter(function(h){ return (h.check_date||h.created_at||'').slice(0,10) === useDate; });
   var mins = dayHistory.reduce(function(a,h){return a+(h.mins||0);},0);
@@ -659,9 +657,9 @@ function rTasks() {
     data.tasks.forEach(t => {
       var useDate = activeDate || todayStr();
       var key = t.id + '_' + useDate;
-      const c = checks[key] || (!activeDate ? checks[t.id] : null);
+      const c = checks[key] || null;
       const done = !!c;
-      html += '<div class="tc-compact f' + t.freq[0] + (done ? ' done' : '') + '" onclick="doClick(' + JSON.stringify(t.id) + ',' + JSON.stringify(useDate) + ')">'
+      html += '<div class="tc-compact f' + t.freq[0] + (done ? ' done' : '') + '" data-tid="' + t.id + '" data-date="' + useDate + '" onclick="handleTaskClick(this)">'
         + '<button class="cbtn">' + (done ? '✓' : '') + '</button>'
         + '<div class="ti"><div class="tn">' + t.name + '</div>'
         + (done ? '<div class="dm">👤 ' + c.username + ' · ' + c.mins + 'min</div>' : '')
@@ -674,11 +672,20 @@ function rTasks() {
 }
 
 // ── CHECK ────────────────────────────────────────────────────────────────────
+function handleTaskClick(event) {
+  var el = event.currentTarget;
+  var id = el.getAttribute('data-tid');
+  var date = el.getAttribute('data-date');
+  console.log('CLICK', id, date, 'currentTarget:', el.tagName, el.className);
+  if (!id) { console.log('NO ID - target was:', event.target.tagName, event.target.className); return; }
+  doClick(id, date);
+}
+
 async function doClick(id, dateOverride) {
   const t = TD.find(x => x.id === id);
   const useDate = dateOverride || todayStr();
   const key = id + '_' + useDate;
-  const existingCheck = checks[key] || (useDate === todayStr() ? checks[id] : null);
+  const existingCheck = checks[key] || null;
 
   if (existingCheck) {
     pid = id;
@@ -699,6 +706,7 @@ async function doClick(id, dateOverride) {
 function closeActionModal() {
   document.getElementById('actionModal').classList.remove('open');
   pid = null;
+  pidDate = null;
 }
 
 function openRecheck() {
@@ -715,7 +723,6 @@ async function doUncheck() {
   const useDate = pidDate || todayStr();
   const key = pid + '_' + useDate;
   delete checks[key];
-  if (useDate === todayStr()) delete checks[pid];
   closeActionModal();
   rAll();
   if (calSelectedDate) rCalendar();
@@ -727,6 +734,7 @@ async function doUncheck() {
 function closeModal() {
   document.getElementById('modal').classList.remove('open');
   pid = null;
+  pidDate = null;
   const mshop = document.getElementById('mshop');
   if (mshop) mshop.value = '';
 }
@@ -739,19 +747,20 @@ async function doCheck() {
   const useDate = pidDate || todayStr();
   const rec = { task_id: pid, task_name: t.name, room: t.room, username: usr.name, avatar: usr.avatar, mins, note, check_date: useDate };
   const key = pid + '_' + useDate;
-  const alreadyDone = !!(checks[key] || (useDate === todayStr() ? checks[pid] : null));
+  const alreadyDone = !!checks[key];
+
+  // Leer shop antes de cerrar modal
+  const shopVal = document.getElementById('mshop') ? document.getElementById('mshop').value.trim() : '';
 
   // Actualizar estado local inmediatamente
   checks[key] = rec;
-  if (useDate === todayStr()) checks[pid] = rec;
+  rec._date = useDate;
   const now = new Date();
   history.unshift({ ...rec, created_at: now.toISOString() });
   closeModal();
   rAll();
   if (calSelectedDate) rCalendar();
 
-  // Agregar a lista de compras si hay texto
-  const shopVal = document.getElementById('mshop').value.trim();
   if (shopVal) addShopItem(shopVal);
 
   // Guardar en Supabase
@@ -1239,7 +1248,7 @@ function rCalendar() {
     TD.forEach(function(t) {
       var key = t.id + '_' + calSelectedDate;
       var done = !!(checks[key] || (calSelectedDate === todayISO ? checks[t.id] : null));
-      html += '<div class="tc-compact f'+t.freq[0]+(done?' done':'')+'" onclick="doClick('+JSON.stringify(t.id)+','+JSON.stringify(calSelectedDate)+')">'
+      html += '<div class="tc-compact f'+t.freq[0]+(done?' done':'')+'" data-tid="'+t.id+'" data-date="'+calSelectedDate+'" onclick="handleTaskClick(this)">'
         + '<button class="cbtn">'+(done?'✓':'')+'</button>'
         + '<div class="ti"><div class="tn">'+t.name+'</div>'
         + '<div style="font-size:10px;color:var(--muted)">'+t.room+'</div></div>'
