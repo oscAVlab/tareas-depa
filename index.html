@@ -37,6 +37,14 @@
   .user-badge:hover { border-color: var(--accent); }
   .udot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 
+  /* DATE BAR */
+  .date-scroll { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .date-scroll::-webkit-scrollbar { display: none; }
+  .date-chip { flex-shrink: 0; width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; transition: all 0.2s; font-family: 'Roboto', sans-serif; white-space: nowrap; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+  .date-chip:hover { border-color: var(--accent); color: var(--text); }
+  .date-chip.active { background: var(--accent); border-color: var(--accent); color: #0f0e17; font-weight: 500; }
+  .date-chip.has-data { border-color: rgba(93,193,185,0.4); }
+
   /* ONLINE INDICATOR */
   .online-bar { background: rgba(167,201,87,0.1); border-bottom: 1px solid rgba(167,201,87,0.2); padding: 6px 20px; font-size: 12px; color: var(--green); display: flex; align-items: center; gap: 6px; }
   .online-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
@@ -144,6 +152,21 @@
   .empty { text-align: center; padding: 40px; color: var(--muted); }
   .emico { font-size: 36px; margin-bottom: 10px; }
 
+  /* CALENDAR */
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 16px; }
+  .cal-day-name { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; font-weight: 500; }
+  .cal-day { aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; position: relative; }
+  .cal-day:hover { border-color: var(--accent); }
+  .cal-day.today { border-color: var(--accent); background: rgba(93,193,185,0.1); }
+  .cal-day.selected { background: var(--accent); border-color: var(--accent); }
+  .cal-day.selected .cal-num { color: #0f0e17; font-weight: 700; }
+  .cal-day.empty { background: transparent; border-color: transparent; cursor: default; }
+  .cal-day.future { opacity: 0.3; cursor: default; }
+  .cal-num { font-size: 13px; font-weight: 400; }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); margin-top: 2px; }
+  .cal-dot-partial { background: var(--accent); }
+  .cal-day-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+
   /* COLLAPSIBLE SECTIONS */
   .shdr { cursor: pointer; user-select: none; }
   .shdr:hover .stit { color: var(--accent); }
@@ -224,11 +247,12 @@
 
   <div class="online-bar">
     <div class="online-dot"></div>
-    <span id="onlineText">Conectado · datos en tiempo real</span>
+    <span>Conectado · datos en tiempo real</span>
   </div>
 
   <div class="tabs">
     <button class="tab active" onclick="goTab('tasks',this)">📋 Tareas</button>
+    <button class="tab" onclick="goTab('calendario',this)">📅 Calendario</button>
     <button class="tab" onclick="goTab('turnos',this)">🔄 Turnos</button>
     <button class="tab" onclick="goTab('semana',this)">📊 Semana</button>
     <button class="tab" onclick="goTab('history',this)">📜 Historial</button>
@@ -240,6 +264,7 @@
   <div id="tab-tasks" class="ctn">
     <div id="errBar" class="err-bar"></div>
     <div class="stats" id="sbar"></div>
+    <div class="date-scroll" id="dateScroll" style="margin-bottom:12px"></div>
     <div class="fbar">
       <button class="fb active" onclick="doFilter('all',this)">Todas</button>
       <button class="fb" onclick="doFilter('diario',this)">🔥 Diario</button>
@@ -273,6 +298,11 @@
   </div>
 </div>
 
+  <!-- CALENDARIO -->
+  <div id="tab-calendario" class="ctn" style="display:none">
+    <div id="calContent"></div>
+  </div>
+
   <!-- TURNOS -->
   <div id="tab-turnos" class="ctn" style="display:none">
     <div id="turnosList"></div>
@@ -294,6 +324,23 @@
       <button onclick="addShopItem()" style="background:var(--accent);color:#0f0e17;border:none;border-radius:10px;padding:11px 16px;font-family:'Roboto',sans-serif;font-weight:700;font-size:13px;cursor:pointer">+ Agregar</button>
     </div>
     <div id="shopList"></div>
+  </div>
+</div>
+
+<!-- ACTION MODAL (tarea ya hecha) -->
+<div class="overlay" id="actionModal">
+  <div class="modal">
+    <h3 id="amodalTitle">Tarea completada</h3>
+    <p class="msub" id="amodalSub"></p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+      <button class="btn btn-p" onclick="openRecheck()" style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <span>➕</span> Registrar otra vez
+      </button>
+      <button class="btn" style="background:rgba(242,95,76,0.1);color:var(--accent2);border:1px solid rgba(242,95,76,0.2)" onclick="doUncheck()">
+        <span>✕</span> Quitar registro
+      </button>
+      <button class="btn btn-s" onclick="closeActionModal()">Cancelar</button>
+    </div>
   </div>
 </div>
 
@@ -411,9 +458,11 @@ const TD = [
 ];
 
 // ── ESTADO ───────────────────────────────────────────────────────────────────
-let sb, usr = null, filt = 'all', pid = null;
+let sb, usr = null, filt = 'all', pid = null, pidDate = null;
+let activeDate = null; // null = today
 let assignments = {};
-let checks = {}, history = [];
+let checks = {}, allChecks = [], history = [];
+let calSelectedDate = null;
 let selAv = '🧑';
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
@@ -442,17 +491,83 @@ async function init() {
   }
 }
 
+function todayStr() {
+  return new Date().toISOString().slice(0,10);
+}
+
+function dateStr(d) {
+  return d instanceof Date ? d.toISOString().slice(0,10) : d;
+}
+
 async function loadData() {
   const [c, h, a] = await Promise.all([
     sb.from('checks').select('*'),
     sb.from('history').select('*').order('created_at', { ascending: false }),
     sb.from('assignments').select('*')
   ]);
+  // checks keyed by task_id+date so multiple days work
   checks = {};
-  (c.data || []).forEach(r => checks[r.task_id] = r);
+  allChecks = [];
+  (c.data || []).forEach(r => {
+    allChecks.push(r);
+    var d = r.check_date || todayStr();
+    var key = r.task_id + '_' + d;
+    checks[key] = r;
+    // also keep today's checks under just task_id for backwards compat
+    if (d === todayStr()) checks[r.task_id] = r;
+  });
   history = h.data || [];
   assignments = {};
   (a.data || []).forEach(r => assignments[r.task_id] = r);
+}
+
+function renderDateBar() {
+  var today = new Date();
+  var days = [];
+  // Show last 14 days + today
+  for (var i = 13; i >= 0; i--) {
+    var d = new Date(today);
+    d.setDate(today.getDate() - i);
+    days.push(d);
+  }
+
+  var datesWithData = {};
+  history.forEach(function(h) {
+    var d = (h.check_date || h.created_at || '').slice(0,10);
+    if (d) datesWithData[d] = true;
+  });
+
+  var todayISO = todayStr();
+  var currentActive = activeDate || todayISO;
+
+  var html = days.map(function(d) {
+    var iso = dateStr(d);
+    var isToday = iso === todayISO;
+    var isActive = iso === currentActive;
+    var hasData = datesWithData[iso];
+    var dayName = isToday ? 'HOY' : d.toLocaleDateString('es', {weekday:'short'}).toUpperCase().slice(0,3);
+    var dayNum = d.getDate();
+    var label = '<span style="font-size:9px;opacity:0.7">'+dayName+'</span><span style="font-size:14px;font-weight:500">'+dayNum+'</span>';
+    var cls = 'date-chip' + (isActive ? ' active' : '') + (hasData && !isActive ? ' has-data' : '');
+    return '<button class="' + cls + '" onclick="setActiveDate(' + JSON.stringify(iso) + ')">' + label + '</button>';
+  }).join('');
+
+  var el = document.getElementById('dateScroll');
+  if (el) {
+    el.innerHTML = html;
+    // Auto scroll to active date
+    setTimeout(function() {
+      var active = el.querySelector('.active');
+      if (active) active.scrollIntoView({inline:'center', block:'nearest', behavior:'smooth'});
+    }, 50);
+  }
+}
+
+function setActiveDate(iso) {
+  activeDate = iso === todayStr() ? null : iso;
+  renderDateBar();
+  rTasks();
+  rStats();
 }
 
 function showApp() {
@@ -477,7 +592,7 @@ function doChangeUser() {
 
 // ── TABS ─────────────────────────────────────────────────────────────────────
 function goTab(t, btn) {
-  ['tasks','history','ranking','shopping','turnos','semana'].forEach(x => document.getElementById('tab-'+x).style.display = 'none');
+  ['tasks','history','ranking','shopping','turnos','semana','calendario'].forEach(x => document.getElementById('tab-'+x).style.display = 'none');
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-'+t).style.display = 'block';
   btn.classList.add('active');
@@ -486,6 +601,7 @@ function goTab(t, btn) {
   if (t === 'shopping') rShop();
   if (t === 'turnos') rTurnos();
   if (t === 'semana') rSemana();
+  if (t === 'calendario') rCalendar();
 }
 
 function doFilter(f, btn) {
@@ -496,17 +612,20 @@ function doFilter(f, btn) {
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────────────
-function rAll() { rStats(); rTasks(); }
+function rAll() { renderDateBar(); rStats(); rTasks(); }
 
 function rStats() {
-  const done = Object.keys(checks).length;
-  const today = history.filter(h => new Date(h.created_at).toDateString() === new Date().toDateString()).length;
-  const mins = history.reduce((a, h) => a + (h.mins || 0), 0);
-  document.getElementById('sbar').innerHTML = `
-    <div class="sc"><div class="sn">${done}</div><div class="sl">Completadas</div></div>
-    <div class="sc"><div class="sn" style="color:var(--accent2)">${TD.length - done}</div><div class="sl">Pendientes</div></div>
-    <div class="sc"><div class="sn" style="color:var(--purple)">${today}</div><div class="sl">Hoy</div></div>
-    <div class="sc"><div class="sn" style="color:var(--green)">${mins}m</div><div class="sl">Tiempo</div></div>`;
+  var useDate = activeDate || todayStr();
+  var dayChecks = Object.values(checks).filter(function(c){ return (c.check_date||todayStr()) === useDate; });
+  var done = dayChecks.length;
+  var dayHistory = history.filter(function(h){ return (h.check_date||h.created_at||'').slice(0,10) === useDate; });
+  var mins = dayHistory.reduce(function(a,h){return a+(h.mins||0);},0);
+  var isToday = useDate === todayStr();
+  document.getElementById('sbar').innerHTML =
+    '<div class="sc"><div class="sn">'+done+'</div><div class="sl">Completadas</div></div>'
+    + '<div class="sc"><div class="sn" style="color:var(--accent2)">'+(TD.length-done)+'</div><div class="sl">Pendientes</div></div>'
+    + '<div class="sc"><div class="sn" style="color:var(--purple)">'+dayHistory.length+'</div><div class="sl">Registros</div></div>'
+    + '<div class="sc"><div class="sn" style="color:var(--green)">'+mins+'m</div><div class="sl">Tiempo</div></div>';
 }
 
 // Track collapsed sections
@@ -538,9 +657,11 @@ function rTasks() {
       + '</div>'
       + '<div class="task-grid">';
     data.tasks.forEach(t => {
-      const c = checks[t.id], done = !!c;
-      const freqClass = fc[t.freq] || 'd';
-      html += '<div class="tc-compact f' + t.freq[0] + (done ? ' done' : '') + '" onclick="doClick(\'' + t.id + '\')">'
+      var useDate = activeDate || todayStr();
+      var key = t.id + '_' + useDate;
+      const c = checks[key] || (!activeDate ? checks[t.id] : null);
+      const done = !!c;
+      html += '<div class="tc-compact f' + t.freq[0] + (done ? ' done' : '') + '" onclick="doClick(' + JSON.stringify(t.id) + ',' + JSON.stringify(useDate) + ')">'
         + '<button class="cbtn">' + (done ? '✓' : '') + '</button>'
         + '<div class="ti"><div class="tn">' + t.name + '</div>'
         + (done ? '<div class="dm">👤 ' + c.username + ' · ' + c.mins + 'min</div>' : '')
@@ -553,17 +674,54 @@ function rTasks() {
 }
 
 // ── CHECK ────────────────────────────────────────────────────────────────────
-async function doClick(id) {
+async function doClick(id, dateOverride) {
   const t = TD.find(x => x.id === id);
-  if (checks[id]) {
-    if (!confirm(`¿Desmarcar "${t.name}"?`)) return;
-    await sb.from('checks').delete().eq('task_id', id);
-    await loadData(); rAll(); return;
+  const useDate = dateOverride || todayStr();
+  const key = id + '_' + useDate;
+  const existingCheck = checks[key] || (useDate === todayStr() ? checks[id] : null);
+
+  if (existingCheck) {
+    pid = id;
+    pidDate = useDate;
+    document.getElementById('amodalTitle').textContent = t.name;
+    document.getElementById('amodalSub').textContent = 'Hecha por ' + existingCheck.username + ' · ' + existingCheck.mins + 'min · ' + useDate;
+    document.getElementById('actionModal').classList.add('open');
+    return;
   }
   pid = id;
-  document.getElementById('mtname').textContent = t.name;
+  pidDate = useDate;
+  document.getElementById('mtname').textContent = t.name + (useDate !== todayStr() ? ' · ' + useDate : '');
   document.getElementById('mnote').value = '';
+  document.getElementById('mshop').value = '';
   document.getElementById('modal').classList.add('open');
+}
+
+function closeActionModal() {
+  document.getElementById('actionModal').classList.remove('open');
+  pid = null;
+}
+
+function openRecheck() {
+  document.getElementById('actionModal').classList.remove('open');
+  const t = TD.find(x => x.id === pid);
+  document.getElementById('mtname').textContent = t.name + ' (otra vez)';
+  document.getElementById('mnote').value = '';
+  document.getElementById('mshop').value = '';
+  document.getElementById('modal').classList.add('open');
+}
+
+async function doUncheck() {
+  if (!pid) return;
+  const useDate = pidDate || todayStr();
+  const key = pid + '_' + useDate;
+  delete checks[key];
+  if (useDate === todayStr()) delete checks[pid];
+  closeActionModal();
+  rAll();
+  if (calSelectedDate) rCalendar();
+  try {
+    await sb.from('checks').delete().eq('task_id', pid).eq('check_date', useDate);
+  } catch(e) { console.error(e); }
 }
 
 function closeModal() {
@@ -578,24 +736,29 @@ async function doCheck() {
   const t = TD.find(x => x.id === pid);
   const mins = parseInt(document.getElementById('mtime').value);
   const note = document.getElementById('mnote').value.trim();
-  const rec = { task_id: pid, task_name: t.name, room: t.room, username: usr.name, avatar: usr.avatar, mins, note };
+  const useDate = pidDate || todayStr();
+  const rec = { task_id: pid, task_name: t.name, room: t.room, username: usr.name, avatar: usr.avatar, mins, note, check_date: useDate };
+  const key = pid + '_' + useDate;
+  const alreadyDone = !!(checks[key] || (useDate === todayStr() ? checks[pid] : null));
 
   // Actualizar estado local inmediatamente
-  checks[pid] = rec;
-  history.unshift({ ...rec, created_at: new Date().toISOString() });
+  checks[key] = rec;
+  if (useDate === todayStr()) checks[pid] = rec;
+  const now = new Date();
+  history.unshift({ ...rec, created_at: now.toISOString() });
   closeModal();
   rAll();
+  if (calSelectedDate) rCalendar();
 
   // Agregar a lista de compras si hay texto
   const shopVal = document.getElementById('mshop').value.trim();
-  if (shopVal) {
-    addShopItem(shopVal);
-  }
+  if (shopVal) addShopItem(shopVal);
 
-  // Guardar en Supabase en segundo plano
+  // Guardar en Supabase
   try {
-    await sb.from('checks').delete().eq('task_id', pid);
-    await sb.from('checks').insert(rec);
+    if (!alreadyDone) {
+      await sb.from('checks').insert(rec);
+    }
     await sb.from('history').insert(rec);
   } catch(e) {
     console.error('Error guardando:', e);
@@ -974,6 +1137,137 @@ function rSemana() {
   });
 
   document.getElementById('semanaContent').innerHTML = html;
+}
+
+// ── CALENDAR ─────────────────────────────────────────────────────────────────
+var calMonth = new Date();
+calMonth.setDate(1);
+
+function rCalendar() {
+  var el = document.getElementById('calContent');
+  if (!el) return;
+  var today = new Date();
+  var todayISO = todayStr();
+  var year = calMonth.getFullYear();
+  var month = calMonth.getMonth();
+  var monthName = calMonth.toLocaleDateString('es',{month:'long',year:'numeric'});
+
+  // Build day activity map from history
+  var dayActivity = {};
+  history.forEach(function(h) {
+    var d = (h.check_date || h.created_at || '').slice(0,10);
+    if (!d) return;
+    if (!dayActivity[d]) dayActivity[d] = 0;
+    dayActivity[d]++;
+  });
+
+  // Total tasks per day based on freq
+  var totalDaily = TD.filter(function(t){return t.freq==='diario';}).length;
+
+  var html = '';
+
+  // Month nav
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+    + '<button onclick="calPrevMonth()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px">‹</button>'
+    + '<span style="font-size:15px;font-weight:500;text-transform:capitalize">'+monthName+'</span>'
+    + '<button onclick="calNextMonth()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px">›</button>'
+    + '</div>';
+
+  // Day names
+  html += '<div class="cal-grid">';
+  ['Lu','Ma','Mi','Ju','Vi','Sa','Do'].forEach(function(d) {
+    html += '<div class="cal-day-name">'+d+'</div>';
+  });
+
+  // First day offset (Monday = 0)
+  var firstDay = new Date(year, month, 1).getDay();
+  var offset = firstDay === 0 ? 6 : firstDay - 1;
+  for (var i=0; i<offset; i++) html += '<div class="cal-day empty"></div>';
+
+  // Days
+  var daysInMonth = new Date(year, month+1, 0).getDate();
+  for (var day=1; day<=daysInMonth; day++) {
+    var iso = year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    var isToday = iso === todayISO;
+    var isFuture = iso > todayISO;
+    var isSelected = iso === calSelectedDate;
+    var count = dayActivity[iso] || 0;
+    var dotClass = count >= totalDaily ? 'cal-dot' : count > 0 ? 'cal-dot cal-dot-partial' : '';
+    var cls = 'cal-day' + (isToday?' today':'') + (isSelected?' selected':'') + (isFuture?' future':'');
+    var onclick = isFuture ? '' : ('onclick="selectCalDay(' + JSON.stringify(iso) + ')"');
+    html += '<div class="'+cls+'" '+onclick+'>'
+      + '<span class="cal-num">'+day+'</span>'
+      + (dotClass ? '<div class="'+dotClass+'"></div>' : '')
+      + '</div>';
+  }
+  html += '</div>';
+
+  // Selected day detail
+  if (calSelectedDate) {
+    var dayHistory = history.filter(function(h) {
+      var d = (h.check_date || h.created_at || '').slice(0,10);
+      return d === calSelectedDate;
+    });
+    var displayDate = new Date(calSelectedDate+'T12:00:00').toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+
+    html += '<div class="cal-day-detail">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+      + '<p style="font-size:14px;font-weight:500;text-transform:capitalize">'+displayDate+'</p>'
+      + '<span style="font-size:12px;color:var(--muted)">'+dayHistory.length+' registros</span>'
+      + '</div>';
+
+    if (dayHistory.length) {
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      dayHistory.forEach(function(h) {
+        html += '<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:8px;padding:9px 12px">'
+          + '<span style="font-size:16px">'+(h.avatar||'🧑')+'</span>'
+          + '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500">'+h.task_name+'</div>'
+          + '<div style="font-size:11px;color:var(--muted)">'+h.username+' · '+h.room+'</div></div>'
+          + '<span style="font-size:12px;color:var(--accent);font-weight:500">'+h.mins+'min</span>'
+          + '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<p style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">Sin registros este día</p>';
+    }
+
+    // Add task button for past/today
+    html += '<div style="margin-top:14px">'
+      + '<p style="font-size:12px;color:var(--muted);margin-bottom:8px">Agregar registro para este día:</p>'
+      + '<div class="task-grid">';
+
+    TD.forEach(function(t) {
+      var key = t.id + '_' + calSelectedDate;
+      var done = !!(checks[key] || (calSelectedDate === todayISO ? checks[t.id] : null));
+      html += '<div class="tc-compact f'+t.freq[0]+(done?' done':'')+'" onclick="doClick('+JSON.stringify(t.id)+','+JSON.stringify(calSelectedDate)+')">'
+        + '<button class="cbtn">'+(done?'✓':'')+'</button>'
+        + '<div class="ti"><div class="tn">'+t.name+'</div>'
+        + '<div style="font-size:10px;color:var(--muted)">'+t.room+'</div></div>'
+        + '</div>';
+    });
+
+    html += '</div></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function selectCalDay(iso) {
+  calSelectedDate = calSelectedDate === iso ? null : iso;
+  rCalendar();
+}
+
+function calPrevMonth() {
+  calMonth.setMonth(calMonth.getMonth()-1);
+  rCalendar();
+}
+
+function calNextMonth() {
+  var next = new Date(calMonth);
+  next.setMonth(next.getMonth()+1);
+  var today = new Date();
+  today.setDate(1);
+  if (next <= today) { calMonth = next; rCalendar(); }
 }
 
 // ── SHOPPING LIST ────────────────────────────────────────────────────────────
