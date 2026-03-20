@@ -358,7 +358,7 @@ async function init(){
 }
 
 async function loadData(){
-  const[c,h]=await Promise.all([sb.from('checks').select('*'),sb.from('history').select('*').order('created_at',{ascending:false})]);
+  const[c,h]=await Promise.all([sb.from('checks').select('*'),sb.from('task_history').select('*').order('created_at',{ascending:false})]);
   checks={};
   (c.data||[]).forEach(r=>{const d=r.check_date||r.created_at.slice(0,10);checks[d+'_'+r.task_id]=r;});
   history=h.data||[];
@@ -512,7 +512,7 @@ async function doCheck(){
   if(shopVal)addShopItem(shopVal);
   try{
     // history always gets a new row (keeps all repetitions)
-    await sb.from('history').insert(rec);
+    await sb.from('task_history').insert(rec);
     // checks: try insert first, if fails (duplicate) just update
     const {error} = await sb.from('checks').insert(rec);
     if(error){
