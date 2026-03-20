@@ -510,7 +510,17 @@ async function doCheck(){
   history.unshift({...rec,created_at:new Date().toISOString()});
   closeModal();rAll();
   if(shopVal)addShopItem(shopVal);
-  try{await sb.from('checks').insert(rec);await sb.from('history').insert(rec);}catch(e){console.error(e);}
+  try{
+    // history always gets a new row (keeps all repetitions)
+    await sb.from('history').insert(rec);
+    // checks: try insert first, if fails (duplicate) just update
+    const {error} = await sb.from('checks').insert(rec);
+    if(error){
+      // already exists for this task+date, just update it
+      await sb.from('checks').update({username:rec.username,avatar:rec.avatar,mins:rec.mins,note:rec.note})
+        .eq('task_id',taskId).eq('check_date',snapDay);
+    }
+  }catch(e){console.error('Supabase error:',e);}
 }
 
 function setHistFilter(f,btn){histFilter=f;document.querySelectorAll('#histFilters .fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');rHist();}
