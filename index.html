@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -157,6 +158,7 @@
     <button class="tab" onclick="goTab('history',this)">📜 Historial</button>
     <button class="tab" onclick="goTab('ranking',this)">🏆 Ranking</button>
     <button class="tab" onclick="goTab('shopping',this)">🛒 Compras</button>
+    <button class="tab" onclick="goTab('gestionar',this)">⚙️ Gestionar</button>
   </div>
 
   <div id="tab-tasks" class="ctn">
@@ -201,7 +203,43 @@
     <div id="shopList"></div>
   </div>
 
+  <!-- GESTIONAR TAREAS -->
+
+  <div id="tab-gestionar" class="ctn" style="display:none">
+    <p style="font-size:15px;font-weight:500;margin-bottom:4px">⚙️ Gestionar tareas</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Agrega tareas personalizadas que se suman a las existentes.</p>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+      <p style="font-size:13px;font-weight:500;margin-bottom:12px">Nueva tarea</p>
+      <div class="fg"><label>Nombre</label><input type="text" id="ctName" placeholder="Ej: Limpiar ventilador..."></div>
+      <div class="fg"><label>Zona</label>
+        <select id="ctRoom">
+          <option value="Baño">🚿 Baño</option>
+          <option value="Cocina">🍳 Cocina</option>
+          <option value="Sala">🛋️ Sala</option>
+          <option value="Pasillo">🚶 Pasillo</option>
+          <option value="Balcones">🌿 Balcones</option>
+          <option value="Cuarto">🛏️ Cuarto</option>
+          <option value="Estudio">💻 Estudio</option>
+          <option value="Ropa">👕 Ropa</option>
+          <option value="Perro">🐶 Perro</option>
+          <option value="Gestión">🛒 Gestión</option>
+          <option value="Otra">📦 Otra</option>
+        </select>
+      </div>
+      <div class="fg"><label>Frecuencia</label>
+        <select id="ctFreq">
+          <option value="diario">🔥 Diario</option>
+          <option value="semanal" selected>📅 Semanal</option>
+          <option value="mensual">🗓️ Mensual</option>
+        </select>
+      </div>
+      <button onclick="addCustomTask()" style="width:100%;padding:12px;background:var(--accent);color:#0f0e17;border:none;border-radius:10px;font-family:Roboto,sans-serif;font-weight:700;font-size:13px;cursor:pointer">+ Agregar tarea</button>
+    </div>
+    <div id="customTaskList"></div>
+  </div>
+
   <!-- CHECK MODAL -->
+
   <div class="overlay" id="modal">
     <div class="modal">
       <h3>✅ Registrar tarea</h3>
@@ -237,6 +275,7 @@
   </div>
 
   <!-- ACTION MODAL -->
+
   <div class="overlay" id="actionModal">
     <div class="modal">
       <h3 id="amodalTitle">Tarea completada</h3>
@@ -250,6 +289,7 @@
   </div>
 
   <!-- DATE PICKER MODAL -->
+
   <div class="overlay" id="dpModal">
     <div class="modal">
       <h3>📅 Ir a fecha</h3>
@@ -331,9 +371,28 @@ const TD = [
   {id:'g3',room:'Gestión',icon:'🛒',name:'Hacer lista de compras',freq:'semanal'},
   {id:'g4',room:'Gestión',icon:'🛒',name:'Hacer compras',freq:'semanal'},
   {id:'g5',room:'Gestión',icon:'🛒',name:'Guardar compras',freq:'semanal'},
+  {id:'g6',room:'Gestión',icon:'🛒',name:'Pagos',freq:'mensual'},
+  // BAÑO nuevas
+  {id:'b19',room:'Baño',icon:'🚿',name:'Reponer papel, jabón y artículos',freq:'diario'},
+  {id:'b20',room:'Baño',icon:'🚿',name:'Desinfectar inodoro rápido',freq:'diario'},
+  // COCINA nuevas
+  {id:'c8',room:'Cocina',icon:'🍳',name:'Orden general cocina',freq:'diario'},
+  {id:'c9',room:'Cocina',icon:'🍳',name:'Limpiar fregadero',freq:'diario'},
+  {id:'c10',room:'Cocina',icon:'🍳',name:'Barrer piso',freq:'diario'},
+  {id:'c11',room:'Cocina',icon:'🍳',name:'Fregar piso',freq:'semanal'},
+  {id:'c12',room:'Cocina',icon:'🍳',name:'Limpiar estufa',freq:'semanal'},
+  {id:'c13',room:'Cocina',icon:'🍳',name:'Desengrassar campana extractora',freq:'mensual'},
+  // SALA nuevas
+  {id:'s6',room:'Sala',icon:'🛋️',name:'Ordenar y recoger objetos',freq:'diario'},
+  // CUARTO nuevas
+  {id:'h7',room:'Cuarto',icon:'🛏️',name:'Tender la cama',freq:'diario'},
+  {id:'h8',room:'Cuarto',icon:'🛏️',name:'Ventilar la habitación',freq:'diario'},
+  {id:'h9',room:'Cuarto',icon:'🛏️',name:'Ordenar ropa y objetos',freq:'diario'},
+  // ESTUDIO nuevas
+  {id:'est8',room:'Estudio',icon:'💻',name:'Ordenar escritorio',freq:'diario'},
 ];
 
-let sb, pid=null, checks={}, history=[];
+let sb, pid=null, checks={}, history=[], customTasks=[];
 let usr=null, filt='all', histFilter='all', rankView='general';
 let selectedDay=new Date(); selectedDay.setHours(0,0,0,0);
 let collapsedSections=JSON.parse(localStorage.getItem('dt_collapsed')||'{}');
@@ -344,6 +403,60 @@ function todayKey(){return dayKey(new Date());}
 function selKey(){return dayKey(selectedDay);}
 function isToday(){return selKey()===todayKey();}
 function taskKey(id,day){return (day||selKey())+'_'+id;}
+
+// ── CUSTOM TASKS ─────────────────────────────────────────────────────────────
+async function addCustomTask(){
+  const name=document.getElementById('ctName').value.trim();
+  const room=document.getElementById('ctRoom').value;
+  const freq=document.getElementById('ctFreq').value;
+  if(!name){document.getElementById('ctName').style.borderColor='var(--accent2)';return;}
+  if(!confirm('¿Agregar tarea "'+name+'" a '+room+'?'))return;
+  const rec={name,room,freq,created_by:usr?usr.name:''};
+  try{
+    const{data,error}=await sb.from('custom_tasks').insert(rec).select();
+    if(error)throw error;
+    customTasks.push({...rec,id:data[0].id});
+    document.getElementById('ctName').value='';
+    rCustomTasks();rTasks();
+    alert('✅ Tarea agregada correctamente');
+  }catch(e){console.error(e);alert('Error al guardar');}
+}
+
+function handleDeleteCustom(el){
+  const dbId=el.getAttribute('data-ctid');
+  const ct=customTasks.find(c=>c.id===dbId);
+  if(ct) deleteCustomTask(dbId,ct.name);
+}
+
+async function deleteCustomTask(dbId,name){
+  if(!confirm('¿Eliminar tarea "'+name+'"?'))return;
+  try{
+    await sb.from('custom_tasks').delete().eq('id',dbId);
+    customTasks=customTasks.filter(ct=>ct.id!==dbId);
+    rCustomTasks();rTasks();
+  }catch(e){console.error(e);}
+}
+
+function rCustomTasks(){
+  const el=document.getElementById('customTaskList');
+  if(!el)return;
+  if(!customTasks.length){
+    el.innerHTML='<div class="empty"><div class="emico">📋</div><p>No hay tareas personalizadas aún.</p></div>';
+    return;
+  }
+  const icons={'Baño':'🚿','Cocina':'🍳','Sala':'🛋️','Pasillo':'🚶','Balcones':'🌿','Cuarto':'🛏️','Estudio':'💻','Ropa':'👕','Perro':'🐶','Gestión':'🛒','Otra':'📦'};
+  let html='<p style="font-size:13px;font-weight:500;margin-bottom:10px">Tareas agregadas ('+customTasks.length+')</p>';
+  customTasks.forEach(ct=>{
+    const ico=icons[ct.room]||'📦';
+    html+='<div class="hi" style="align-items:center">'
+      +'<div class="hav">'+ico+'</div>'
+      +'<div class="hinf"><div class="ht">'+ct.name+'</div>'
+      +'<div class="hd">'+ct.room+' · '+ct.freq+(ct.created_by?' · por '+ct.created_by:'')+'</div></div>'
+      +'<div data-ctid="'+ct.id+'" onclick="handleDeleteCustom(this)" style="background:rgba(242,95,76,0.1);color:var(--accent2);border:1px solid rgba(242,95,76,0.2);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;flex-shrink:0">Eliminar</div>'
+      +'</div>';
+  });
+  el.innerHTML=html;
+}
 
 async function init(){
   try{
@@ -358,10 +471,15 @@ async function init(){
 }
 
 async function loadData(){
-  const[c,h]=await Promise.all([sb.from('checks').select('*'),sb.from('task_history').select('*').order('created_at',{ascending:false})]);
+  const[c,h,ct]=await Promise.all([
+    sb.from('checks').select('*'),
+    sb.from('task_history').select('*').order('created_at',{ascending:false}),
+    sb.from('custom_tasks').select('*').order('created_at',{ascending:true})
+  ]);
   checks={};
   (c.data||[]).forEach(r=>{const d=r.check_date||r.created_at.slice(0,10);checks[d+'_'+r.task_id]=r;});
   history=h.data||[];
+  customTasks=ct.data||[];
 }
 
 function showApp(){
@@ -403,10 +521,11 @@ function applyDp(){
 }
 
 function goTab(t,btn){
-  ['tasks','history','ranking','shopping'].forEach(x=>document.getElementById('tab-'+x).style.display='none');
+  ['tasks','history','ranking','shopping','gestionar'].forEach(x=>document.getElementById('tab-'+x).style.display='none');
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+t).style.display='block';btn.classList.add('active');
   if(t==='history')rHist();if(t==='ranking')rRank();if(t==='shopping')rShop();
+  if(t==='gestionar')rCustomTasks();
 }
 
 function doFilter(f,btn){filt=f;document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');rTasks();}
@@ -427,9 +546,16 @@ function rStats(){
 
 function toggleSection(room){collapsedSections[room]=!collapsedSections[room];localStorage.setItem('dt_collapsed',JSON.stringify(collapsedSections));rTasks();}
 
+function allTasks(){
+  const icons={'Baño':'🚿','Cocina':'🍳','Sala':'🛋️','Pasillo':'🚶','Balcones':'🌿','Cuarto':'🛏️','Estudio':'💻','Ropa':'👕','Perro':'🐶','Gestión':'🛒','Otra':'📦'};
+  return [...TD, ...customTasks.map(ct=>({
+    id:'ct_'+ct.id, room:ct.room, icon:icons[ct.room]||'📦', name:ct.name, freq:ct.freq, _custom:true, _dbId:ct.id
+  }))];
+}
+
 function rTasks(){
   const sel=selKey();
-  let tasks=TD;
+  let tasks=allTasks();
   if(filt==='pending')tasks=tasks.filter(t=>!checks[sel+'_'+t.id]);
   else if(filt!=='all')tasks=tasks.filter(t=>t.freq===filt);
   const rooms={};
@@ -642,5 +768,6 @@ function rShop(){
 
 init();
 </script>
+
 </body>
 </html>
