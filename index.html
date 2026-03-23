@@ -233,7 +233,7 @@
           <option value="mensual">🗓️ Mensual</option>
         </select>
       </div>
-      <button onclick="addCustomTask()" style="width:100%;padding:12px;background:var(--accent);color:#0f0e17;border:none;border-radius:10px;font-family:Roboto,sans-serif;font-weight:700;font-size:13px;cursor:pointer">+ Agregar tarea</button>
+      <button id="ctBtn" onclick="addCustomTask()" style="width:100%;padding:12px;background:var(--accent);color:#0f0e17;border:none;border-radius:10px;font-family:Roboto,sans-serif;font-weight:700;font-size:13px;cursor:pointer">+ Agregar tarea</button>
     </div>
     <div id="customTaskList"></div>
   </div>
@@ -406,20 +406,25 @@ function taskKey(id,day){return (day||selKey())+'_'+id;}
 
 // ── CUSTOM TASKS ─────────────────────────────────────────────────────────────
 async function addCustomTask(){
-  const name=document.getElementById('ctName').value.trim();
+  const nameEl=document.getElementById('ctName');
+  const name=nameEl.value.trim();
   const room=document.getElementById('ctRoom').value;
   const freq=document.getElementById('ctFreq').value;
-  if(!name){document.getElementById('ctName').style.borderColor='var(--accent2)';return;}
-  if(!confirm('¿Agregar tarea "'+name+'" a '+room+'?'))return;
+  if(!name){nameEl.style.borderColor='var(--accent2)';nameEl.focus();return;}
+  nameEl.style.borderColor='';
   const rec={name,room,freq,created_by:usr?usr.name:''};
   try{
-    const{data,error}=await sb.from('custom_tasks').insert(rec).select();
-    if(error)throw error;
-    customTasks.push({...rec,id:data[0].id});
-    document.getElementById('ctName').value='';
-    rCustomTasks();rTasks();
-    alert('✅ Tarea agregada correctamente');
-  }catch(e){console.error(e);alert('Error al guardar');}
+    // insert without .select() to avoid permission issues
+    const{error}=await sb.from('custom_tasks').insert(rec);
+    if(error){console.error('Insert error:',JSON.stringify(error));return;}
+    // reload from DB to get the real id
+    await loadData();
+    nameEl.value='';
+    rCustomTasks();
+    rTasks();
+  }catch(e){
+    console.error('Error:',JSON.stringify(e));
+  }
 }
 
 function handleDeleteCustom(el){
@@ -429,7 +434,6 @@ function handleDeleteCustom(el){
 }
 
 async function deleteCustomTask(dbId,name){
-  if(!confirm('¿Eliminar tarea "'+name+'"?'))return;
   try{
     await sb.from('custom_tasks').delete().eq('id',dbId);
     customTasks=customTasks.filter(ct=>ct.id!==dbId);
