@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -204,7 +203,6 @@
   </div>
 
   <!-- GESTIONAR TAREAS -->
-
   <div id="tab-gestionar" class="ctn" style="display:none">
     <p style="font-size:15px;font-weight:500;margin-bottom:4px">⚙️ Gestionar tareas</p>
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Agrega tareas personalizadas que se suman a las existentes.</p>
@@ -239,7 +237,6 @@
   </div>
 
   <!-- CHECK MODAL -->
-
   <div class="overlay" id="modal">
     <div class="modal">
       <h3>✅ Registrar tarea</h3>
@@ -275,7 +272,6 @@
   </div>
 
   <!-- ACTION MODAL -->
-
   <div class="overlay" id="actionModal">
     <div class="modal">
       <h3 id="amodalTitle">Tarea completada</h3>
@@ -289,7 +285,6 @@
   </div>
 
   <!-- DATE PICKER MODAL -->
-
   <div class="overlay" id="dpModal">
     <div class="modal">
       <h3>📅 Ir a fecha</h3>
@@ -552,8 +547,8 @@ function toggleSection(room){collapsedSections[room]=!collapsedSections[room];lo
 
 function allTasks(){
   const icons={'Baño':'🚿','Cocina':'🍳','Sala':'🛋️','Pasillo':'🚶','Balcones':'🌿','Cuarto':'🛏️','Estudio':'💻','Ropa':'👕','Perro':'🐶','Gestión':'🛒','Otra':'📦'};
-  return [...TD, ...customTasks.map(ct=>({
-    id:'ct_'+ct.id, room:ct.room, icon:icons[ct.room]||'📦', name:ct.name, freq:ct.freq, _custom:true, _dbId:ct.id
+  return [...TD, ...customTasks.map((ct,i)=>({
+    id:'ct'+i, room:ct.room, icon:icons[ct.room]||'📦', name:ct.name, freq:ct.freq, _custom:true, _dbId:ct.id
   }))];
 }
 
@@ -772,6 +767,5 @@ function rShop(){
 
 init();
 </script>
-
 </body>
 </html>
