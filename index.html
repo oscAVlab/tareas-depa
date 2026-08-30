@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🏠 Tareas del Depa</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0f0e17;--surface:#1a1828;--surface2:#221f35;--accent:#5dc1b9;--accent2:#f25f4c;--green:#a7c957;--purple:#7b5ea7;--text:#fffffe;--muted:#a7a9be;--border:rgba(255,255,255,0.07);--radius:14px; }
@@ -98,6 +99,23 @@
   .reset-box p{font-size:13px;color:var(--muted);margin-bottom:14px}
   .shop-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px}
   .empty{text-align:center;padding:40px;color:var(--muted)}
+  .chart-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+  .chart-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px}
+  .period-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .period-btn{padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:all 0.2s;font-family:'Roboto',sans-serif;font-weight:500}
+  .period-btn.active{background:var(--accent);border-color:var(--accent);color:#0f0e17}
+  .view-tabs{display:flex;gap:8px;margin-bottom:12px}
+  .view-tab{padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;transition:all 0.2s;font-family:'Roboto',sans-serif}
+  .view-tab.active{background:var(--accent);border-color:var(--accent);color:#0f0e17}
+  .heatmap-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+  .heatmap-cell{padding:8px;border-radius:4px;text-align:center;font-size:11px;color:#fff;position:relative}
+  .heatmap-cell-label{font-size:10px;color:var(--muted);font-weight:500;margin-bottom:4px}
+  .heatmap-row{margin-bottom:12px}
+  .heatmap-user{font-size:12px;font-weight:500;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .chart-container{position:relative;height:260px}
+  .viz-tabs{display:flex;gap:8px;margin-bottom:14px}
+  .viz-tab{padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:all 0.2s;font-family:'Roboto',sans-serif}
+  .viz-tab.active{background:var(--accent);border-color:var(--accent);color:#0f0e17}
   .emico{font-size:36px;margin-bottom:10px}
   @media(max-width:500px){.task-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ctn{padding:14px}}
 </style>
@@ -388,7 +406,7 @@ const TD = [
 ];
 
 let sb, pid=null, checks={}, history=[], customTasks=[];
-let usr=null, filt='all', histFilter='all', rankView='general';
+let usr=null, filt='all', histFilter='all', rankView='general', vizPeriod='hoy', vizView='daily';
 let selectedDay=new Date(); selectedDay.setHours(0,0,0,0);
 let collapsedSections=JSON.parse(localStorage.getItem('dt_collapsed')||'{}');
 let shopItems=JSON.parse(localStorage.getItem('dt_shop')||'[]');
@@ -407,18 +425,32 @@ async function addCustomTask(){
   const freq=document.getElementById('ctFreq').value;
   if(!name){nameEl.style.borderColor='var(--accent2)';nameEl.focus();return;}
   nameEl.style.borderColor='';
+  
   const rec={name,room,freq,created_by:usr?usr.name:''};
   try{
-    // insert without .select() to avoid permission issues
-    const{error}=await sb.from('custom_tasks').insert(rec);
-    if(error){console.error('Insert error:',JSON.stringify(error));return;}
-    // reload from DB to get the real id
-    await loadData();
-    nameEl.value='';
-    rCustomTasks();
-    rTasks();
+    // Insertar tarea personalizada CON .select() para obtener respuesta
+    const{data,error}=await sb.from('custom_tasks').insert([rec]).select();
+    if(error){
+      console.error('Insert error:',error.message);
+      alert('❌ Error al guardar: '+error.message);
+      return;
+    }
+    // Si insertó correctamente, agrega localmente
+    if(data && data.length>0){
+      customTasks.push(data[0]);
+      nameEl.value='';
+      rCustomTasks();
+      rTasks();
+    }else{
+      // Si no devuelve data, recarga desde DB
+      await loadData();
+      nameEl.value='';
+      rCustomTasks();
+      rTasks();
+    }
   }catch(e){
-    console.error('Error:',JSON.stringify(e));
+    console.error('Error capturado:',e);
+    alert('❌ Error inesperado: '+e.message);
   }
 }
 
@@ -470,15 +502,26 @@ async function init(){
 }
 
 async function loadData(){
-  const[c,h,ct]=await Promise.all([
-    sb.from('checks').select('*'),
-    sb.from('task_history').select('*').order('created_at',{ascending:false}),
-    sb.from('custom_tasks').select('*').order('created_at',{ascending:true})
-  ]);
-  checks={};
-  (c.data||[]).forEach(r=>{const d=r.check_date||r.created_at.slice(0,10);checks[d+'_'+r.task_id]=r;});
-  history=h.data||[];
-  customTasks=ct.data||[];
+  try{
+    const[c,h,ct]=await Promise.all([
+      sb.from('checks').select('*'),
+      sb.from('task_history').select('*').order('created_at',{ascending:false}),
+      sb.from('custom_tasks').select('*').order('created_at',{ascending:true})
+    ]);
+    
+    // Validar errores
+    if(c.error)console.warn('Checks error:',c.error);
+    if(h.error)console.warn('History error:',h.error);
+    if(ct.error)console.warn('Custom tasks error:',ct.error);
+    
+    // Cargar datos o usar arrays vacíos si hay error
+    checks={};
+    (c.data||[]).forEach(r=>{const d=r.check_date||r.created_at.slice(0,10);checks[d+'_'+r.task_id]=r;});
+    history=h.data||[];
+    customTasks=ct.data||[];
+  }catch(e){
+    console.error('loadData error:',e);
+  }
 }
 
 function showApp(){
@@ -548,7 +591,12 @@ function toggleSection(room){collapsedSections[room]=!collapsedSections[room];lo
 function allTasks(){
   const icons={'Baño':'🚿','Cocina':'🍳','Sala':'🛋️','Pasillo':'🚶','Balcones':'🌿','Cuarto':'🛏️','Estudio':'💻','Ropa':'👕','Perro':'🐶','Gestión':'🛒','Otra':'📦'};
   return [...TD, ...customTasks.map((ct,i)=>({
-    id:'ct'+i, room:ct.room, icon:icons[ct.room]||'📦', name:ct.name, freq:ct.freq, _custom:true, _dbId:ct.id
+    id:ct.id,  // ✅ USA EL ID REAL DE SUPABASE
+    room:ct.room, 
+    icon:icons[ct.room]||'📦', 
+    name:ct.name, 
+    freq:ct.freq, 
+    _custom:true
   }))];
 }
 
@@ -587,7 +635,20 @@ function rTasks(){
 }
 
 function doClick(taskId,snapDay){
-  const t=TD.find(x=>x.id===taskId);
+  // Buscar en tareas predefinidas
+  let t=TD.find(x=>x.id===taskId);
+  
+  // Si no está en tareas predefinidas, buscar en tareas personalizadas
+  if(!t){
+    t=customTasks.find(x=>x.id===taskId);
+  }
+  
+  // Si no se encuentra en ningún lado, salir
+  if(!t){
+    alert('❌ Error: Tarea no encontrada');
+    return;
+  }
+  
   const key=snapDay+'_'+taskId;
   if(checks[key]){
     pid={taskId,snapDay};
@@ -607,10 +668,23 @@ function closeModal(){document.getElementById('modal').classList.remove('open');
 function closeActionModal(){document.getElementById('actionModal').classList.remove('open');pid=null;}
 
 function openRecheck(){
-  const t=TD.find(x=>x.id===pid.taskId);
+  // Buscar en tareas predefinidas
+  let t=TD.find(x=>x.id===pid.taskId);
+  
+  // Si no está en tareas predefinidas, buscar en tareas personalizadas
+  if(!t){
+    t=customTasks.find(x=>x.id===pid.taskId);
+  }
+  
+  if(!t){
+    alert('❌ Error: Tarea no encontrada');
+    return;
+  }
+  
   document.getElementById('actionModal').classList.remove('open');
   document.getElementById('mtname').textContent=t.name+' (otra vez)';
-  document.getElementById('mnote').value='';document.getElementById('mshop').value='';
+  document.getElementById('mnote').value='';
+  document.getElementById('mshop').value='';
   document.getElementById('modal').classList.add('open');
 }
 
@@ -625,7 +699,20 @@ async function doUncheck(){
 async function doCheck(){
   if(!pid)return;
   const{taskId,snapDay}=pid;
-  const t=TD.find(x=>x.id===taskId);
+  
+  // Buscar en tareas predefinidas
+  let t=TD.find(x=>x.id===taskId);
+  
+  // Si no está en tareas predefinidas, buscar en tareas personalizadas
+  if(!t){
+    t=customTasks.find(x=>x.id===taskId);
+  }
+  
+  if(!t){
+    alert('❌ Error: Tarea no encontrada');
+    return;
+  }
+  
   const mins=parseInt(document.getElementById('mtime').value);
   const note=document.getElementById('mnote').value.trim();
   const shopVal=document.getElementById('mshop').value.trim();
@@ -676,11 +763,12 @@ function setRankView(v,btn){rankView=v;document.querySelectorAll('#rankTabs .fb'
 function rRank(){
   const icons={'Baño':'🚿','Cocina':'🍳','Sala':'🛋️','Pasillo':'🚶','Balcones':'🌿','Cuarto':'🛏️','Estudio':'💻','Ropa':'👕','Perro':'🐶','Gestión':'🛒'};
   const medals=['🥇','🥈','🥉'];
-  const isGen=rankView==='general',isZona=rankView==='zona',isTarea=rankView==='tarea';
+  const isGen=rankView==='general',isZona=rankView==='zona',isTarea=rankView==='tarea',isDaily=rankView==='daily';
   let html=`<div class="fbar" id="rankTabs" style="margin-bottom:20px">
     <button class="fb${isGen?' active':''}" onclick="setRankView('general',this)">General</button>
     <button class="fb${isZona?' active':''}" onclick="setRankView('zona',this)">Por zona</button>
     <button class="fb${isTarea?' active':''}" onclick="setRankView('tarea',this)">Por tarea</button>
+    <button class="fb${isDaily?' active':''}" onclick="setRankView('daily',this)">📊 Diario</button>
   </div>`;
   if(!history.length){html+='<div class="empty"><div class="emico">🏆</div><p>Sin datos aún.</p></div>';document.getElementById('rlist').innerHTML=html;return;}
   if(isGen){
@@ -729,8 +817,189 @@ function rRank(){
       });
       html+='</div>';
     });
+  }else if(isDaily){
+    html+=`<div class="period-tabs">
+      <button class="period-btn${vizPeriod==='hoy'?' active':''}" onclick="setVizPeriod('hoy')">📅 Hoy</button>
+      <button class="period-btn${vizPeriod==='semana'?' active':''}" onclick="setVizPeriod('semana')">📊 Semana</button>
+      <button class="period-btn${vizPeriod==='mes'?' active':''}" onclick="setVizPeriod('mes')">📈 Mes</button>
+    </div>`;
+    html+=`<div class="view-tabs">
+      <button class="view-tab${vizView==='daily'?' active':''}" onclick="setVizView('daily')">📊 Diario</button>
+      <button class="view-tab${vizView==='temporal'?' active':''}" onclick="setVizView('temporal')">📈 Temporal</button>
+    </div>`;
+    html+=`<div class="chart-box">
+      <div class="chart-title">${vizView==='daily'?'📈 Minutos por Persona':'📈 Crecimiento Acumulado'}</div>
+      <div class="chart-container"><canvas id="dailyMinutos"></canvas></div>
+    </div>`;
+    html+=`<div class="chart-box">
+      <div class="chart-title">✅ Tareas Completadas</div>
+      <div class="chart-container"><canvas id="dailyTareas"></canvas></div>
+    </div>`;
+    html+=`<div class="chart-box">
+      <div class="chart-title">🏠 Distribución por Zona</div>
+      <div class="chart-container"><canvas id="dailyZonas"></canvas></div>
+    </div>`;
   }
   document.getElementById('rlist').innerHTML=html;
+  if(isDaily)setTimeout(renderDailyCharts,50);
+}
+
+function setVizPeriod(p){vizPeriod=p;document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));event.target.classList.add('active');renderDailyCharts();}
+function setVizView(v){vizView=v;document.querySelectorAll('.view-tab').forEach(b=>b.classList.remove('active'));event.target.classList.add('active');renderDailyCharts();}
+
+function renderDailyCharts(){
+  const hoy=selKey();
+  const today=new Date(hoy);
+  let dataToUse=[];
+  let dateLabels=[];
+  
+  if(vizPeriod==='hoy'){
+    dataToUse=history.filter(h=>h.check_date===hoy);
+    dateLabels=['Persona'];
+  }else if(vizPeriod==='semana'){
+    const weekStart=new Date(today);
+    weekStart.setDate(today.getDate()-today.getDay());
+    for(let i=0;i<7;i++){
+      const d=new Date(weekStart);
+      d.setDate(d.getDate()+i);
+      const ds=d.toISOString().split('T')[0];
+      dateLabels.push(['Dom','Lun','Mar','Mié','Jue','Vie','Sab'][i]);
+      dataToUse.push(...history.filter(h=>h.check_date===ds));
+    }
+  }else{
+    const monthStart=new Date(today.getFullYear(),today.getMonth(),1);
+    const monthEnd=new Date(today.getFullYear(),today.getMonth()+1,0);
+    for(let d=new Date(monthStart);d<=monthEnd;d.setDate(d.getDate()+1)){
+      dateLabels.push(d.getDate()+'');
+    }
+    dataToUse=history.filter(h=>{
+      const hDate=new Date(h.check_date);
+      return hDate.getMonth()===today.getMonth()&&hDate.getFullYear()===today.getFullYear();
+    });
+  }
+  
+  // Datos por usuario
+  const todayByUser={};
+  dataToUse.forEach(h=>{
+    if(!todayByUser[h.username])todayByUser[h.username]={mins:0,count:0};
+    todayByUser[h.username].mins+=h.mins||0;
+    todayByUser[h.username].count++;
+  });
+  
+  // Para vista temporal: datos acumulativos
+  const allData=history;
+  const userDates={};
+  const avgByUser={};
+  allData.forEach(h=>{
+    if(!userDates[h.username])userDates[h.username]=new Set();
+    userDates[h.username].add(h.check_date);
+    if(!avgByUser[h.username])avgByUser[h.username]={total:0,count:0};
+    avgByUser[h.username].total+=h.mins||0;
+    avgByUser[h.username].count++;
+  });
+  
+  const users=vizView==='daily'?Object.keys(todayByUser):Object.keys(avgByUser);
+  const labels=vizView==='daily'?users:dateLabels;
+  
+  let minsToday, minsAvg;
+  if(vizView==='daily'){
+    minsToday=users.map(u=>todayByUser[u]?.mins||0);
+    minsAvg=users.map(u=>Math.round(avgByUser[u]?.total/Math.max(userDates[u]?.size||1,1)));
+  }else{
+    // Vista temporal: líneas acumulativas
+    const allDates=Object.keys([...new Set(allData.map(h=>h.check_date))]).sort();
+    const userAccum={};
+    users.forEach(u=>userAccum[u]={accum:[],total:0});
+    allDates.forEach(date=>{
+      allData.filter(h=>h.check_date===date).forEach(h=>{
+        if(userAccum[h.username]){
+          userAccum[h.username].total+=h.mins||0;
+          userAccum[h.username].accum.push(userAccum[h.username].total);
+        }
+      });
+    });
+    users.forEach(u=>{
+      while(userAccum[u].accum.length<allDates.length)userAccum[u].accum.push(userAccum[u].accum[userAccum[u].accum.length-1]||0);
+    });
+    minsToday=users.map(u=>userAccum[u].accum);
+    dateLabels=allDates.map((d,i)=>i%Math.ceil(allDates.length/8)===0?d.split('-')[2]:'');
+    labels=dateLabels;
+  }
+  
+  if(window.chartDaily)window.chartDaily.destroy();
+  if(vizView==='daily'){
+    window.chartDaily=new Chart(document.getElementById('dailyMinutos'),{
+      type:'bar',
+      data:{
+        labels:labels,
+        datasets:[
+          {label:'Hoy',data:minsToday,backgroundColor:'var(--accent)',borderRadius:4},
+          {label:'Promedio',data:minsAvg,backgroundColor:'var(--muted)',borderRadius:4,alpha:0.5}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{color:'var(--text)',font:{size:11}}}},
+        scales:{y:{ticks:{color:'var(--muted)'},grid:{color:'var(--border)'}},x:{ticks:{color:'var(--muted)'},grid:{color:'var(--border)'}}}
+      }
+    });
+  }else{
+    window.chartDaily=new Chart(document.getElementById('dailyMinutos'),{
+      type:'line',
+      data:{
+        labels:labels,
+        datasets:users.map((u,i)=>({
+          label:u,
+          data:minsToday[i],
+          borderColor:u==='Alejandro'?'var(--accent)':'var(--purple)',
+          backgroundColor:(u==='Alejandro'?'rgba(93,193,185,0.1)':'rgba(123,94,167,0.1)'),
+          borderWidth:2,
+          fill:true,
+          tension:0.4,
+          pointRadius:3,
+          pointBackgroundColor:u==='Alejandro'?'var(--accent)':'var(--purple)'
+        }))
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{color:'var(--text)',font:{size:11}}}},
+        scales:{y:{ticks:{color:'var(--muted)'},grid:{color:'var(--border)'}},x:{ticks:{color:'var(--muted)'},grid:{color:'var(--border)'}}}
+      }
+    });
+  }
+  
+  // Tareas por usuario
+  const tasksToday=users.map(u=>todayByUser[u].count);
+  if(window.chartTareas)window.chartTareas.destroy();
+  window.chartTareas=new Chart(document.getElementById('dailyTareas'),{
+    type:'bar',
+    data:{labels:labels,datasets:[{label:'Tareas',data:tasksToday,backgroundColor:'var(--accent)',borderRadius:4}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{y:{ticks:{color:'var(--muted)'},grid:{color:'var(--border)'}},x:{ticks:{color:'var(--muted)'},grid:{color:'var(--border)'}}}
+    }
+  });
+  
+  // Zonas hoy
+  const zonesToday={};
+  todayData.forEach(h=>{zonesToday[h.room]=(zonesToday[h.room]||0)+1});
+  const zoneLabels=Object.keys(zonesToday);
+  const zoneData=Object.values(zonesToday);
+  const zoneColors=['var(--accent)','var(--purple)','var(--green)','var(--accent2)','var(--muted)'];
+  
+  if(window.chartZonas)window.chartZonas.destroy();
+  window.chartZonas=new Chart(document.getElementById('dailyZonas'),{
+    type:'doughnut',
+    data:{
+      labels:zoneLabels.map(z=>z+' ('+zonesToday[z]+')'),
+      datasets:[{data:zoneData,backgroundColor:zoneColors.slice(0,zoneLabels.length)}]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{color:'var(--text)',font:{size:11}}}}
+    }
+  });
 }
 
 async function doReset(){
